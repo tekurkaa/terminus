@@ -32,7 +32,6 @@ Sub-second exchange feeds · Real-time breakout scanner · Quantitative alpha mo
 
 ---
 
-# terminus
 
 **TERMINUS** is a high-performance, full-stack financial market terminal designed for active equity traders, quantitative analysts, and portfolio managers. It combines sub-second live exchange market feeds, predictive alpha generation models, congressional trading intelligence, and automated breakout alerts in a sleek, dark-mode terminal interface.
 
