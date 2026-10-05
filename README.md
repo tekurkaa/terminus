@@ -1,6 +1,8 @@
 <div align="center">
 
-<img src="assets/terminus-banner.svg" alt="TERMINUS · Personal Investment Command Center" width="880" />
+<a href="https://portfolio-manager-by-atv.vercel.app/">
+  <img src="assets/terminus-banner.svg" alt="TERMINUS · Personal Investment Command Center" width="880" />
+</a>
 
 ### Institutional Portfolio Intelligence & Autonomous Market Command Center
 
