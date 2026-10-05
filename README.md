@@ -1,12 +1,36 @@
-# TERMINUS · Institutional Portfolio Manager & Market Terminal
+<div align="center">
 
-> Real-time quantitative investment terminal, institutional breakout scanner, multi-source news aggregator, alpha signals engine, and automated daily email digest.
+<img src="assets/terminus-banner.png" alt="TERMINUS · Personal Investment Command Center" width="880" />
 
-🔗 **Live Production URL**: [https://portfolio-manager-by-atv.vercel.app/](https://portfolio-manager-by-atv.vercel.app/)
+### Institutional Portfolio Intelligence & Autonomous Market Command Center
+
+Sub-second exchange feeds · Real-time breakout scanner · Quantitative alpha models · Multi-source macro intelligence · Gemini 3.8 Flash catalyst reasoning
+
+[**Explore Live Demo »**](https://portfolio-manager-by-atv.vercel.app/) • [**Key Features**](#-key-features) • [**Breakout Scanner**](#4--breakout-scanner--automated-daily-email-digest) • [**API Docs**](#-api-endpoints) • [**Quickstart**](#-installation--quickstart)
+
+<br />
+
+[![Live Demo](https://img.shields.io/badge/LIVE_DEMO-ACTIVE-10B981?style=for-the-badge&logo=vercel&logoColor=white)](https://portfolio-manager-by-atv.vercel.app/)
+[![Tests](https://img.shields.io/badge/TESTS-96_PASSING-10B981?style=for-the-badge&logo=pytest&logoColor=white)](#)
+[![E2E](https://img.shields.io/badge/E2E_SUITES-24_PASSING-06B6D4?style=for-the-badge&logo=playwright&logoColor=white)](#)
+[![License](https://img.shields.io/badge/LICENSE-MIT-3B82F6?style=for-the-badge)](#)
+[![Developer](https://img.shields.io/badge/DEVELOPER-ATHARV_TEKURKAR-black?style=for-the-badge&logo=github&logoColor=white)](https://github.com/tekurkaa)
+
+[![Python](https://img.shields.io/badge/PYTHON-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](#)
+[![FastAPI](https://img.shields.io/badge/FASTAPI-0.110+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](#)
+[![React](https://img.shields.io/badge/REACT-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](#)
+[![AI Reasoning](https://img.shields.io/badge/AI_REASONING-GEMINI_3.8_FLASH-F59E0B?style=for-the-badge&logo=google&logoColor=white)](#)
+[![Database](https://img.shields.io/badge/DATABASE-MONGODB_ATLAS-47A248?style=for-the-badge&logo=mongodb&logoColor=white)](#)
+
+[![Email Digest](https://img.shields.io/badge/DIGEST-RESEND_GATEWAY-black?style=for-the-badge&logo=resend&logoColor=white)](#)
+[![Market Feeds](https://img.shields.io/badge/MARKET_FEEDS-SUB_SECOND-06B6D4?style=for-the-badge)](#)
+[![Design System](https://img.shields.io/badge/WCAG_2.1-AA_VERIFIED-10B981?style=for-the-badge)](#)
+
+</div>
 
 ---
 
-## ⚡ Overview
+# terminus
 
 **TERMINUS** is a high-performance, full-stack financial market terminal designed for active equity traders, quantitative analysts, and portfolio managers. It combines sub-second live exchange market feeds, predictive alpha generation models, congressional trading intelligence, and automated breakout alerts in a sleek, dark-mode terminal interface.
 
@@ -58,7 +82,11 @@
   - Formulates institutional 1-2 sentence trade theses directly synthesizing real breaking headlines, catalyst drivers, technical setup, and volume confirmation.
   - Computes quantitative conviction scores (1–10) and catalyst classifications (*FDA Approval*, *Mega M&A*, *Pre-Earnings Squeeze*, *AI Inflection*, *Commercial Deal*, *Institutional Accumulation*).
   - Highlights trade theses and breaking news cards (with live article links, recency badges, and velocity tags) directly in the terminal UI and embeds them in daily HTML email digests.
-- **Automated Morning Delivery**: Built-in background cron scheduler (`_daily_scheduler_loop`) dispatches styled HTML daily breakout digests to opted-in users via **Resend**.
+- **Configurable Delivery Schedule & Live Tracking**:
+  - **Customizable Delivery Time**: Select pre-market (08:30 AM ET, 09:15 AM ET), market open (09:30 AM ET), post-market (04:15 PM ET, 04:30 PM ET), or specify any custom minute (`HH:MM`).
+  - **Timezone Awareness & UTC Rollover Guard**: Scheduler converts current time to the user's local timezone (via Python `zoneinfo.ZoneInfo`) and validates against local calendar dates (`YYYY-MM-DD`), preventing premature duplicate sends caused by UTC midnight rollover.
+  - **Live Next-Run Indicator**: Real-time badge in the Email Alerts block displaying exact next scheduled dispatch (`Tomorrow, Oct 5 at 8:30 AM EDT`) and last delivery status.
+  - **Precision Cron Scheduler**: 60-second polling loop with 12-hour minimum-interval safety guard.
 - **Instant Dispatch**: One-click "Send Now" button from the Scanner tab with direct address targeting and automatic preference synchronization (`POST /api/scanner/notify` with optional `{ "email": "..." }`).
 
 ### 5. 🧠 Quantitative Alpha & Options Flow Signals

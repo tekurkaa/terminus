@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, fmtPct, openStockModal } from "@/lib/api";
 import { toast } from "sonner";
-import { RefreshCw, Radar, Mail, Bell, ChevronRight, Sparkles, Zap, ExternalLink, Newspaper, Flame } from "lucide-react";
+import { RefreshCw, Radar, Mail, Bell, ChevronRight, Sparkles, Zap, ExternalLink, Newspaper, Flame, Clock, Calendar, CheckCircle2 } from "lucide-react";
 
 const signalColor = (s) => {
   if (s === "STRONG BUY") return "text-emerald-400 border-emerald-800 bg-emerald-950/40";
@@ -14,8 +14,21 @@ export default function ScannerTab() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [sending, setSending] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [email, setEmail] = useState("");
   const [enabled, setEnabled] = useState(false);
+  const [scheduleTime, setScheduleTime] = useState("08:30");
+  const [timezone, setTimezone] = useState(() => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York";
+    } catch {
+      return "America/New_York";
+    }
+  });
+  const [nextRun, setNextRun] = useState(null);
+  const [lastSentDate, setLastSentDate] = useState(null);
+  const [lastSentAt, setLastSentAt] = useState(null);
+  const [isCustomTime, setIsCustomTime] = useState(false);
 
   const load = async (isBackground = false, isManual = false) => {
     if (!isBackground && (!data.candidates || data.candidates.length === 0)) {
@@ -29,8 +42,21 @@ export default function ScannerTab() {
         api.get("/scanner/prefs").catch(() => ({ data: {} })),
       ]);
       setData(scan.data);
-      setEmail(prefs.data.email || "");
-      setEnabled(!!prefs.data.enabled);
+      if (prefs.data) {
+        setEmail(prefs.data.email || "");
+        setEnabled(!!prefs.data.enabled);
+        if (prefs.data.schedule_time) {
+          setScheduleTime(prefs.data.schedule_time);
+          const presets = ["08:30", "09:15", "09:30", "16:15", "16:30"];
+          if (!presets.includes(prefs.data.schedule_time)) {
+            setIsCustomTime(true);
+          }
+        }
+        if (prefs.data.timezone) setTimezone(prefs.data.timezone);
+        setNextRun(prefs.data.next_scheduled_run || null);
+        setLastSentDate(prefs.data.last_sent_date || null);
+        setLastSentAt(prefs.data.last_sent_at || null);
+      }
     } catch {
       if (isManual) {
         toast.error("Failed to scan");
@@ -53,12 +79,24 @@ export default function ScannerTab() {
       toast.error("Please enter a valid email address");
       return;
     }
+    setSaving(true);
     try {
-      await api.post("/scanner/prefs", { email: trimmed, enabled });
+      await api.post("/scanner/prefs", {
+        email: trimmed,
+        enabled,
+        schedule_time: scheduleTime,
+        timezone: timezone,
+      });
       toast.success("Notification preferences saved");
+      const fresh = await api.get("/scanner/prefs").catch(() => null);
+      if (fresh?.data?.next_scheduled_run) {
+        setNextRun(fresh.data.next_scheduled_run);
+      }
     } catch (err) {
       const msg = err.response?.data?.detail || "Failed to save";
       toast.error(msg);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -71,8 +109,14 @@ export default function ScannerTab() {
     setSending(true);
     try {
       const { data } = await api.post("/scanner/notify", { email: trimmed });
-      if (data.sent) toast.success(`Digest sent to ${trimmed}`);
-      else {
+      if (data.sent) {
+        toast.success(`Digest sent to ${trimmed}`);
+        const fresh = await api.get("/scanner/prefs").catch(() => null);
+        if (fresh?.data) {
+          setNextRun(fresh.data.next_scheduled_run || null);
+          setLastSentDate(fresh.data.last_sent_date || null);
+        }
+      } else {
         toast.warning("Email delivery notice", { description: data.reason?.slice(0, 150) });
       }
     } catch {
@@ -101,33 +145,154 @@ export default function ScannerTab() {
         </div>
       </div>
 
-      {/* Email notifications */}
-      <div className="border border-[#222C3D] bg-[#121721] p-4 rounded-sm panel-raised" data-testid="notify-block">
-        <div className="flex items-center gap-2 mb-3">
-          <Bell className="w-4 h-4 text-emerald-400" />
-          <span className="text-[10px] font-mono tracking-widest text-emerald-400 uppercase">Email Alerts</span>
+      {/* Email notifications & Delivery Schedule */}
+      <div className="border border-[#222C3D] bg-[#121721] p-4 rounded-sm panel-raised space-y-3" data-testid="notify-block">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Bell className="w-4 h-4 text-emerald-400" />
+            <span className="text-[10px] font-mono tracking-widest text-emerald-400 uppercase">Email Alerts &amp; Delivery Schedule</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {enabled ? (
+              <div
+                data-testid="notify-schedule-badge"
+                className="flex items-center gap-1.5 text-[10px] font-mono px-2 py-0.5 rounded-sm bg-emerald-950/50 border border-emerald-800 text-emerald-400"
+              >
+                <Clock className="w-3 h-3 text-emerald-400 shrink-0" />
+                <span>Next digest: <span className="text-gray-100 font-semibold">{nextRun?.next_run_human || `${scheduleTime} (${timezone})`}</span></span>
+              </div>
+            ) : (
+              <div
+                data-testid="notify-schedule-badge"
+                className="text-[10px] font-mono px-2 py-0.5 rounded-sm bg-[#161C26] border border-[#222C3D] text-gray-500"
+              >
+                Digest Paused
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Row 1: Email + Checkbox + Buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          <input value={email} onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com" data-testid="notify-email-input"
+          <input
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            data-testid="notify-email-input"
+            aria-label="Email address for daily digest"
             className="bg-[#0E131F] border border-[#222C3D] text-gray-100 text-xs px-3 py-2 rounded-sm focus:outline-none focus:border-amber-500 flex-1 min-w-[240px] focus-visible:ring-2 focus-visible:ring-amber-500"
           />
-          <label className="flex items-center gap-2 text-[11px] font-mono text-gray-400 cursor-pointer">
-            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)}
-              data-testid="notify-enabled" className="accent-amber-500" />
+          <label className="flex items-center gap-2 text-[11px] font-mono text-gray-300 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => setEnabled(e.target.checked)}
+              data-testid="notify-enabled"
+              className="accent-amber-500"
+            />
             Daily digest
           </label>
-          <button onClick={savePrefs} data-testid="notify-save"
-            className="border border-[#222C3D] text-gray-300 hover:bg-[#161C26] hover:text-white text-xs uppercase tracking-wider px-3 py-2 rounded-sm transition-all active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
-            Save
+          <button
+            onClick={savePrefs}
+            disabled={saving}
+            data-testid="notify-save"
+            className="border border-[#222C3D] text-gray-300 hover:bg-[#161C26] hover:text-white text-xs uppercase tracking-wider px-3.5 py-2 rounded-sm transition-all active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+          >
+            {saving ? "Saving..." : "Save"}
           </button>
-          <button onClick={sendDigest} disabled={sending || !email} data-testid="notify-send"
-            className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-xs uppercase tracking-wider px-3 py-2 rounded-sm disabled:opacity-50 flex items-center gap-1 transition-all active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none">
+          <button
+            onClick={sendDigest}
+            disabled={sending || !email}
+            data-testid="notify-send"
+            className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-xs uppercase tracking-wider px-3.5 py-2 rounded-sm disabled:opacity-50 flex items-center gap-1 transition-all active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+          >
             <Mail className="w-3.5 h-3.5" /> {sending ? "Sending..." : "Send Now"}
           </button>
         </div>
-        <div className="text-[10px] font-mono text-gray-500 mt-2">
-          Email delivery uses Resend. If not configured yet, "Send Now" returns the digest preview so you know exactly what will be sent.
+
+        {/* Row 2: Delivery Schedule controls (time & timezone) */}
+        <div className="bg-[#0E131F] border border-[#1A2232] rounded-sm p-2.5 flex flex-wrap items-center gap-3 text-xs font-mono text-gray-400">
+          <div className="flex items-center gap-1.5 text-gray-300 text-[11px] uppercase tracking-wider">
+            <Calendar className="w-3.5 h-3.5 text-amber-500" />
+            <span>Schedule:</span>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={isCustomTime ? "custom" : scheduleTime}
+              onChange={(e) => {
+                if (e.target.value === "custom") {
+                  setIsCustomTime(true);
+                } else {
+                  setIsCustomTime(false);
+                  setScheduleTime(e.target.value);
+                }
+              }}
+              data-testid="notify-schedule-time"
+              aria-label="Delivery schedule time"
+              className="bg-[#121721] border border-[#222C3D] text-gray-200 text-xs px-2.5 py-1.5 rounded-sm focus:outline-none focus:border-amber-500 focus-visible:ring-2 focus-visible:ring-amber-500"
+            >
+              <option value="08:30">08:30 AM · Pre-Market (Recommended)</option>
+              <option value="09:15">09:15 AM · Pre-Open Rush</option>
+              <option value="09:30">09:30 AM · Market Open</option>
+              <option value="16:15">04:15 PM · Post-Market</option>
+              <option value="16:30">04:30 PM · Market Close</option>
+              <option value="custom">Custom Time...</option>
+            </select>
+
+            {isCustomTime && (
+              <input
+                type="time"
+                value={scheduleTime}
+                onChange={(e) => setScheduleTime(e.target.value)}
+                data-testid="notify-custom-time"
+                aria-label="Custom delivery time"
+                className="bg-[#121721] border border-[#222C3D] text-gray-200 text-xs px-2.5 py-1 rounded-sm focus:outline-none focus:border-amber-500 focus-visible:ring-2 focus-visible:ring-amber-500"
+              />
+            )}
+
+            <div className="flex items-center gap-1.5 text-gray-400 text-[11px]">
+              <span>TZ:</span>
+              <select
+                value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}
+                data-testid="notify-timezone"
+                aria-label="Notification timezone"
+                className="bg-[#121721] border border-[#222C3D] text-gray-200 text-xs px-2 py-1.5 rounded-sm focus:outline-none focus:border-amber-500 focus-visible:ring-2 focus-visible:ring-amber-500 max-w-[200px]"
+              >
+                <option value="America/New_York">Eastern Time (ET · Market)</option>
+                <option value="America/Chicago">Central Time (CT)</option>
+                <option value="America/Denver">Mountain Time (MT)</option>
+                <option value="America/Los_Angeles">Pacific Time (PT)</option>
+                <option value="UTC">UTC</option>
+                {![
+                  "America/New_York",
+                  "America/Chicago",
+                  "America/Denver",
+                  "America/Los_Angeles",
+                  "UTC",
+                ].includes(timezone) && (
+                  <option value={timezone}>{timezone}</option>
+                )}
+              </select>
+            </div>
+          </div>
+
+          {lastSentDate && (
+            <div className="ml-auto text-[10px] text-gray-500 flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3 text-emerald-400/80" />
+              <span>Last sent: {lastSentDate}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="text-[10px] font-mono text-gray-500 flex flex-wrap items-center justify-between gap-2">
+          <span>
+            Daily breakout scans run automatically in your configured timezone. Prevents UTC rollover duplicates.
+          </span>
+          <span className="text-gray-400">
+            Resend Email Gateway
+          </span>
         </div>
       </div>
 

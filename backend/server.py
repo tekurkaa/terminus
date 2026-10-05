@@ -10,7 +10,9 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
+import re
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -763,6 +765,99 @@ async def watchlist_congress(symbol: str):
 class NotifyPref(BaseModel):
     email: Optional[str] = None
     enabled: Optional[bool] = None
+    schedule_time: Optional[str] = None
+    timezone: Optional[str] = None
+
+
+def is_due_for_digest(pref: dict, now_dt: Optional[datetime] = None) -> bool:
+    """Determine if a daily breakout digest is due for delivery to this subscriber."""
+    if not pref.get("enabled") or not pref.get("email"):
+        return False
+
+    tz_str = pref.get("timezone") or "America/New_York"
+    try:
+        tz = ZoneInfo(tz_str)
+    except Exception:
+        tz = ZoneInfo("America/New_York")
+
+    now = now_dt or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    local_now = now.astimezone(tz)
+    local_today_str = local_now.strftime("%Y-%m-%d")
+
+    # If already sent on today's calendar date in user's timezone, do NOT send
+    if pref.get("last_sent_date") == local_today_str:
+        return False
+
+    # Guard: if last_sent_at was within 12 hours, prevent double-send
+    last_sent_at_str = pref.get("last_sent_at")
+    if last_sent_at_str:
+        try:
+            last_sent_at = datetime.fromisoformat(last_sent_at_str.replace("Z", "+00:00"))
+            if (now - last_sent_at).total_seconds() < 12 * 3600:
+                return False
+        except Exception:
+            pass
+
+    target_time_str = pref.get("schedule_time") or "08:30"
+    try:
+        target_h, target_m = map(int, target_time_str.split(":"))
+    except Exception:
+        target_h, target_m = 8, 30
+
+    current_minutes = local_now.hour * 60 + local_now.minute
+    target_minutes = target_h * 60 + target_m
+
+    return current_minutes >= target_minutes
+
+
+def calculate_next_run(pref: dict, now_dt: Optional[datetime] = None) -> dict:
+    """Calculate the next scheduled digest run timestamp and human-readable label."""
+    tz_str = pref.get("timezone") or "America/New_York"
+    try:
+        tz = ZoneInfo(tz_str)
+    except Exception:
+        tz = ZoneInfo("America/New_York")
+
+    now = now_dt or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    local_now = now.astimezone(tz)
+    local_today_str = local_now.strftime("%Y-%m-%d")
+
+    target_time_str = pref.get("schedule_time") or "08:30"
+    try:
+        target_h, target_m = map(int, target_time_str.split(":"))
+    except Exception:
+        target_h, target_m = 8, 30
+
+    current_minutes = local_now.hour * 60 + local_now.minute
+    target_minutes = target_h * 60 + target_m
+
+    already_sent = pref.get("last_sent_date") == local_today_str
+    if already_sent or current_minutes >= target_minutes:
+        next_date = (local_now + timedelta(days=1)).date()
+        label_prefix = "Tomorrow"
+    else:
+        next_date = local_now.date()
+        label_prefix = "Today"
+
+    next_dt = datetime(next_date.year, next_date.month, next_date.day, target_h, target_m, 0, tzinfo=tz)
+    tz_abbr = next_dt.strftime("%Z")
+    time_str = next_dt.strftime("%I:%M %p").lstrip("0")
+    try:
+        human_str = f"{label_prefix}, {next_dt.strftime('%b %-d')} at {time_str} {tz_abbr}"
+    except ValueError:
+        human_str = f"{label_prefix}, {next_dt.strftime('%b %d')} at {time_str} {tz_abbr}"
+
+    return {
+        "next_run_iso": next_dt.isoformat(),
+        "next_run_human": human_str,
+        "schedule_time": target_time_str,
+        "timezone": tz_str,
+        "is_today": label_prefix == "Today",
+    }
 
 
 @api_router.get("/scanner/breakouts")
@@ -795,10 +890,19 @@ async def scanner_notify_route(data: Optional[ScannerNotifyRequest] = None, user
     html = build_digest_html(scan, to_email)
     result = await send_digest_email(to_email, html)
     if result.get("sent"):
-        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        tz_str = pref.get("timezone") or "America/New_York"
+        try:
+            user_tz = ZoneInfo(tz_str)
+        except Exception:
+            user_tz = ZoneInfo("America/New_York")
+        now_utc = datetime.now(timezone.utc)
+        local_today_str = now_utc.astimezone(user_tz).strftime("%Y-%m-%d")
         await db.notify_prefs.update_one(
             {"user_id": user["user_id"]},
-            {"$set": {"last_sent_date": today_str}},
+            {"$set": {
+                "last_sent_date": local_today_str,
+                "last_sent_at": now_utc.isoformat(),
+            }},
             upsert=True,
         )
     return {**result, "candidates_count": len(scan.get("candidates", []))}
@@ -807,10 +911,17 @@ async def scanner_notify_route(data: Optional[ScannerNotifyRequest] = None, user
 @api_router.get("/scanner/prefs")
 async def scanner_prefs_get(user=Depends(current_user)):
     pref = await db.notify_prefs.find_one({"user_id": user["user_id"]}, {"_id": 0}) or {}
+    schedule_time = pref.get("schedule_time", "08:30")
+    tz_name = pref.get("timezone", "America/New_York")
+    merged_pref = {**pref, "schedule_time": schedule_time, "timezone": tz_name}
     return {
         "email": pref.get("email") or user["email"],
         "enabled": pref.get("enabled", False),
+        "schedule_time": schedule_time,
+        "timezone": tz_name,
         "last_sent_date": pref.get("last_sent_date"),
+        "last_sent_at": pref.get("last_sent_at"),
+        "next_scheduled_run": calculate_next_run(merged_pref),
     }
 
 
@@ -825,6 +936,20 @@ async def scanner_prefs_set(data: NotifyPref, user=Depends(current_user)):
         pref = await db.notify_prefs.find_one({"user_id": user["user_id"]}, {"_id": 0}) or {}
         if not pref.get("email") and not user.get("email"):
             raise HTTPException(status_code=400, detail="Please enter a valid email address.")
+
+    if data.schedule_time is not None:
+        trimmed_time = data.schedule_time.strip()
+        if not re.match(r"^([01]\d|2[0-3]):([0-5]\d)$", trimmed_time):
+            raise HTTPException(status_code=400, detail="Please enter a valid schedule time (HH:MM in 24-hour format).")
+        data.schedule_time = trimmed_time
+
+    if data.timezone is not None:
+        trimmed_tz = data.timezone.strip()
+        try:
+            ZoneInfo(trimmed_tz)
+            data.timezone = trimmed_tz
+        except Exception:
+            raise HTTPException(status_code=400, detail="Please enter a valid timezone (e.g. America/New_York).")
 
     update = {k: v for k, v in data.model_dump().items() if v is not None}
     update["user_id"] = user["user_id"]
@@ -947,27 +1072,36 @@ app.add_middleware(
 
 
 async def _daily_scheduler_loop():
-    """Background task to automatically send daily breakout digests to opted-in users."""
+    """Background task to automatically send daily breakout digests to opted-in users based on their schedule."""
     while True:
         try:
-            today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            prefs = await db.notify_prefs.find({"enabled": True}, {"_id": 0}).to_list(100)
+            now_utc = datetime.now(timezone.utc)
+            prefs = await db.notify_prefs.find({"enabled": True}, {"_id": 0}).to_list(200)
             for p in prefs:
-                if p.get("last_sent_date") != today_str and p.get("email"):
-                    logger.info(f"Auto-triggering daily breakout email for {p['email']}")
+                if is_due_for_digest(p, now_dt=now_utc):
+                    logger.info(f"Auto-triggering daily breakout email for {p['email']} (schedule: {p.get('schedule_time', '08:30')} {p.get('timezone', 'America/New_York')})")
                     wl = await db.watchlist.find({"user_id": p.get("user_id")}, {"_id": 0, "symbol": 1}).to_list(200)
                     extras = [d["symbol"] for d in wl]
                     scan = await scan_breakouts(extras, top_n=10)
                     html = build_digest_html(scan, p["email"])
                     res = await send_digest_email(p["email"], html)
                     if res.get("sent"):
+                        tz_str = p.get("timezone") or "America/New_York"
+                        try:
+                            user_tz = ZoneInfo(tz_str)
+                        except Exception:
+                            user_tz = ZoneInfo("America/New_York")
+                        local_today_str = now_utc.astimezone(user_tz).strftime("%Y-%m-%d")
                         await db.notify_prefs.update_one(
                             {"user_id": p["user_id"]},
-                            {"$set": {"last_sent_date": today_str}}
+                            {"$set": {
+                                "last_sent_date": local_today_str,
+                                "last_sent_at": now_utc.isoformat(),
+                            }}
                         )
         except Exception as e:
             logger.warning(f"Daily email scheduler loop error: {e}")
-        await asyncio.sleep(3600)  # Check hourly
+        await asyncio.sleep(60)  # Check every 60s for precision scheduling
 
 
 @app.on_event("startup")

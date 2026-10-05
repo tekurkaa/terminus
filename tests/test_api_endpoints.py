@@ -212,6 +212,101 @@ async def test_scanner_notify_with_explicit_email():
 
 
 @pytest.mark.asyncio
+async def test_scanner_prefs_custom_schedule_and_timezone():
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        login_res = await client.post("/api/auth/dev-login", json={"email": "sched-user@terminus.local", "name": "Schedule Trader"})
+        cookies = login_res.cookies
+
+        # Save preferences with custom schedule and timezone
+        save_res = await client.post(
+            "/api/scanner/prefs",
+            json={
+                "email": "sched-user@terminus.local",
+                "enabled": True,
+                "schedule_time": "09:15",
+                "timezone": "America/New_York",
+            },
+            cookies=cookies,
+        )
+        assert save_res.status_code == 200
+        saved_data = save_res.json()
+        assert saved_data["schedule_time"] == "09:15"
+        assert saved_data["timezone"] == "America/New_York"
+
+        # Get preferences and verify computed next_scheduled_run
+        get_res = await client.get("/api/scanner/prefs", cookies=cookies)
+        assert get_res.status_code == 200
+        prefs_data = get_res.json()
+        assert prefs_data["email"] == "sched-user@terminus.local"
+        assert prefs_data["enabled"] is True
+        assert prefs_data["schedule_time"] == "09:15"
+        assert prefs_data["timezone"] == "America/New_York"
+        assert "next_scheduled_run" in prefs_data
+        assert "next_run_iso" in prefs_data["next_scheduled_run"]
+        assert "next_run_human" in prefs_data["next_scheduled_run"]
+
+
+@pytest.mark.asyncio
+async def test_scanner_prefs_invalid_schedule_or_tz():
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        login_res = await client.post("/api/auth/dev-login", json={"email": "sched-val@terminus.local", "name": "Val Trader"})
+        cookies = login_res.cookies
+
+        # Invalid schedule time format
+        res_time = await client.post(
+            "/api/scanner/prefs",
+            json={"email": "sched-val@terminus.local", "enabled": True, "schedule_time": "25:99"},
+            cookies=cookies,
+        )
+        assert res_time.status_code == 400
+        assert "valid schedule time" in res_time.json()["detail"].lower()
+
+        # Invalid timezone
+        res_tz = await client.post(
+            "/api/scanner/prefs",
+            json={"email": "sched-val@terminus.local", "enabled": True, "timezone": "Not/A_Real_Timezone"},
+            cookies=cookies,
+        )
+        assert res_tz.status_code == 400
+        assert "valid timezone" in res_tz.json()["detail"].lower()
+
+
+def test_scheduler_timezone_aware_due_logic():
+    from server import is_due_for_digest, calculate_next_run
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    ny_tz = ZoneInfo("America/New_York")
+    # Case A: 8:00 AM EDT, scheduled for 8:30 AM -> NOT due yet
+    now_8am = datetime(2026, 10, 5, 8, 0, 0, tzinfo=ny_tz)
+    pref = {"enabled": True, "email": "a@b.com", "schedule_time": "08:30", "timezone": "America/New_York", "last_sent_date": "2026-10-04"}
+    assert is_due_for_digest(pref, now_dt=now_8am) is False
+
+    # Case B: 8:30 AM EDT, scheduled for 8:30 AM -> DUE!
+    now_830am = datetime(2026, 10, 5, 8, 30, 0, tzinfo=ny_tz)
+    assert is_due_for_digest(pref, now_dt=now_830am) is True
+
+    # Case C: 8:45 AM EDT, already sent today (2026-10-05) -> NOT due
+    pref_sent_today = {"enabled": True, "email": "a@b.com", "schedule_time": "08:30", "timezone": "America/New_York", "last_sent_date": "2026-10-05"}
+    now_845am = datetime(2026, 10, 5, 8, 45, 0, tzinfo=ny_tz)
+    assert is_due_for_digest(pref_sent_today, now_dt=now_845am) is False
+
+    # Case D: CRUCIAL UTC ROLLOVER GUARD:
+    # 8:30 PM EDT on Oct 5 is 00:30 UTC on Oct 6.
+    # User's local date is still Oct 5 (which was already sent).
+    # The scheduler must NOT fire a duplicate just because UTC advanced to Oct 6!
+    now_830pm_edt = datetime(2026, 10, 5, 20, 30, 0, tzinfo=ny_tz)
+    assert is_due_for_digest(pref_sent_today, now_dt=now_830pm_edt) is False
+
+    # Case E: Next run calculation when already sent today -> should be tomorrow at 8:30 AM
+    next_info = calculate_next_run(pref_sent_today, now_dt=now_845am)
+    assert "2026-10-06T08:30:00" in next_info["next_run_iso"]
+    assert "Tomorrow" in next_info["next_run_human"] or "Oct 6" in next_info["next_run_human"]
+
+
+@pytest.mark.asyncio
 async def test_scanner_breakouts_endpoint():
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:

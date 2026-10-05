@@ -76,17 +76,16 @@ test.describe('15. Scanner — Email Digest Notifications (TC-NOTIF)', () => {
     expect(notifyData.sent).toBe(true);
     expect(notifyData.candidates_count).toBeGreaterThan(0);
 
-    // Verify last_sent_date was updated to today's UTC date
+    // Verify last_sent_date was updated to today's local date in user's timezone
     const prefsRes = await request.get(`${BACKEND_URL}/api/scanner/prefs`, {
       headers: { Authorization: `Bearer ${session_token}` },
     });
     const prefs = await prefsRes.json();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: prefs.timezone || 'America/New_York' });
     expect(prefs.last_sent_date).toBe(today);
   });
 
   test('TC-NOTIF-03 — Daily Scheduler Condition Does Not Double-Send on Same Date', async ({ request }) => {
-    const today = new Date().toISOString().slice(0, 10);
     const userEmail = `scheduler-guard-${Date.now()}@terminus.local`;
 
     const authRes = await request.post(`${BACKEND_URL}/api/auth/dev-login`, {
@@ -109,6 +108,7 @@ test.describe('15. Scanner — Email Digest Notifications (TC-NOTIF)', () => {
       headers: { Authorization: `Bearer ${session_token}` },
     });
     const prefs = await prefsRes.json();
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: prefs.timezone || 'America/New_York' });
     expect(prefs.last_sent_date).toBe(today);
 
     // Verify scheduler guard logic: p.get("last_sent_date") == today_str prevents sending
@@ -178,6 +178,48 @@ test.describe('15. Scanner — Email Digest Notifications (TC-NOTIF)', () => {
     // Verify success toast confirms delivery to target email
     const toast = page.locator(`text=Digest sent to ${targetEmail}`);
     await expect(toast).toBeVisible({ timeout: 20000 });
+  });
+
+  test('TC-NOTIF-08 — User can view and change delivery schedule time and timezone, and see active next run badge', async ({ page, request }) => {
+    const userEmail = `schedule-ui-${Date.now()}@terminus.local`;
+    await loginViaUI(page, userEmail);
+    const token = await page.evaluate(() => localStorage.getItem('pm_session_token'));
+
+    await page.locator('[data-testid="tab-scanner-button"]').click();
+    await expect(page.locator('[data-testid="scanner-tab"]')).toBeVisible({ timeout: 10000 });
+
+    const notifyBlock = page.locator('[data-testid="notify-block"]');
+    await expect(notifyBlock).toBeVisible();
+
+    const scheduleSelect = page.locator('[data-testid="notify-schedule-time"]');
+    const enabledCheckbox = page.locator('[data-testid="notify-enabled"]');
+    const saveBtn = page.locator('[data-testid="notify-save"]');
+    const scheduleBadge = page.locator('[data-testid="notify-schedule-badge"]');
+
+    if (!(await enabledCheckbox.isChecked())) {
+      await enabledCheckbox.check();
+    }
+
+    // Select Post-Market / Market Close 16:30
+    await scheduleSelect.selectOption('16:30');
+    await saveBtn.click();
+
+    // Verify confirmation toast
+    await expect(page.locator('text=Notification preferences saved')).toBeVisible({ timeout: 10000 });
+
+    // Verify schedule badge reflects schedule
+    await expect(scheduleBadge).toBeVisible();
+    await expect(scheduleBadge).toContainText('Next digest');
+
+    // Verify backend preferences
+    const verifyRes = await request.get(`${BACKEND_URL}/api/scanner/prefs`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const prefs = await verifyRes.json();
+    expect(prefs.schedule_time).toBe('16:30');
+    expect(prefs.enabled).toBe(true);
+    expect(prefs.next_scheduled_run).toBeDefined();
+    expect(prefs.next_scheduled_run.schedule_time).toBe('16:30');
   });
 });
 
