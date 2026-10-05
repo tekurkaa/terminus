@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/terminus-banner.png" alt="TERMINUS · Personal Investment Command Center" width="880" />
+<img src="assets/terminus-banner.svg" alt="TERMINUS · Personal Investment Command Center" width="880" />
 
 ### Institutional Portfolio Intelligence & Autonomous Market Command Center
 
@@ -11,20 +11,20 @@ Sub-second exchange feeds · Real-time breakout scanner · Quantitative alpha mo
 <br />
 
 [![Live Demo](https://img.shields.io/badge/LIVE_DEMO-ACTIVE-10B981?style=for-the-badge&logo=vercel&logoColor=white)](https://portfolio-manager-by-atv.vercel.app/)
-[![Tests](https://img.shields.io/badge/TESTS-96_PASSING-10B981?style=for-the-badge&logo=pytest&logoColor=white)](#)
-[![E2E](https://img.shields.io/badge/E2E_SUITES-24_PASSING-06B6D4?style=for-the-badge&logo=playwright&logoColor=white)](#)
-[![License](https://img.shields.io/badge/LICENSE-MIT-3B82F6?style=for-the-badge)](#)
-[![Developer](https://img.shields.io/badge/DEVELOPER-ATHARV_TEKURKAR-black?style=for-the-badge&logo=github&logoColor=white)](https://github.com/tekurkaa)
+![Tests](https://img.shields.io/badge/TESTS-96_PASSING-059669?style=for-the-badge&logo=pytest&logoColor=white)
+![E2E](https://img.shields.io/badge/E2E_SUITES-24_PASSING-8B5CF6?style=for-the-badge&logo=playwright&logoColor=white)
+![License](https://img.shields.io/badge/LICENSE-MIT-2563EB?style=for-the-badge)
+[![Developer](https://img.shields.io/badge/DEVELOPER-ATHARV_TEKURKAR-0F172A?style=for-the-badge&logo=github&logoColor=white)](https://github.com/tekurkaa)
 
-[![Python](https://img.shields.io/badge/PYTHON-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](#)
-[![FastAPI](https://img.shields.io/badge/FASTAPI-0.110+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](#)
-[![React](https://img.shields.io/badge/REACT-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](#)
-[![AI Reasoning](https://img.shields.io/badge/AI_REASONING-GEMINI_3.8_FLASH-F59E0B?style=for-the-badge&logo=google&logoColor=white)](#)
-[![Database](https://img.shields.io/badge/DATABASE-MONGODB_ATLAS-47A248?style=for-the-badge&logo=mongodb&logoColor=white)](#)
+![Python](https://img.shields.io/badge/PYTHON-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FASTAPI-0.110+-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/REACT-19-06B6D4?style=for-the-badge&logo=react&logoColor=white)
+![AI Reasoning](https://img.shields.io/badge/AI_REASONING-GEMINI_3.8_FLASH-EA580C?style=for-the-badge&logo=google&logoColor=white)
+![Database](https://img.shields.io/badge/DATABASE-MONGODB_ATLAS-13AA52?style=for-the-badge&logo=mongodb&logoColor=white)
 
-[![Email Digest](https://img.shields.io/badge/DIGEST-RESEND_GATEWAY-black?style=for-the-badge&logo=resend&logoColor=white)](#)
-[![Market Feeds](https://img.shields.io/badge/MARKET_FEEDS-SUB_SECOND-06B6D4?style=for-the-badge)](#)
-[![Design System](https://img.shields.io/badge/WCAG_2.1-AA_VERIFIED-10B981?style=for-the-badge)](#)
+![Email Digest](https://img.shields.io/badge/DIGEST-RESEND_GATEWAY-E11D48?style=for-the-badge&logo=resend&logoColor=white)
+![Market Feeds](https://img.shields.io/badge/MARKET_FEEDS-SUB_SECOND-4F46E5?style=for-the-badge)
+![Design System](https://img.shields.io/badge/WCAG_2.1-AA_VERIFIED-D97706?style=for-the-badge)
 
 </div>
 
